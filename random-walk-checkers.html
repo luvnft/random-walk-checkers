@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Walk Checkers</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            margin-top: 20px;
+        }
+        #checkerboard {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            gap: 1px;
+            background-color: #000;
+            padding: 1px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+        }
+        .light {
+            background-color: #f0d9b5;
+        }
+        .dark {
+            background-color: #b58863;
+        }
+        .highlight-red {
+            background-color: #ff6b6b;
+        }
+        .highlight-green {
+            background-color: #88cc88;
+        }
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #000;
+        }
+        .red {
+            background-color: #d00;
+        }
+        .black {
+            background-color: #000;
+        }
+        .king::after {
+            content: '♔';
+            color: #fff;
+            font-size: 24px;
+            position: relative;
+            top: -5px;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+        button {
+            margin: 10px;
+            padding: 5px 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Random Walk Checkers</h1>
+    <div id="game-container">
+        <div id="checkerboard"></div>
+        <div id="status">Red's turn</div>
+        <button id="start">Start</button>
+        <button id="stop">Stop</button>
+        <button id="reset">Reset</button>
+    </div>
+
+    <script>
+        class CheckersGame {
+            constructor() {
+                this.board = Array(8).fill().map(() => Array(8).fill(null));
+                this.currentPlayer = 'red';
+                this.currentPosition = [0, 0];
+                this.initializeBoard();
+            }
+
+            initializeBoard() {
+                for (let row = 0; row < 8; row++) {
+                    for (let col = 0; col < 8; col++) {
+                        if ((row + col) % 2 === 1) {
+                            if (row < 3) {
+                                this.board[row][col] = { color: 'black', king: false };
+                            } else if (row > 4) {
+                                this.board[row][col] = { color: 'red', king: false };
+                            }
+                        }
+                    }
+                }
+            }
+
+            isValidMove(fromRow, fromCol, toRow, toCol) {
+                if (toRow < 0 || toRow >= 8 || toCol < 0 || toCol >= 8) return false;
+                if (this.board[toRow][toCol] !== null) return false;
+
+                const piece = this.board[fromRow][fromCol];
+                if (!piece || piece.color !== this.currentPlayer) return false;
+
+                const rowDiff = toRow - fromRow;
+                const colDiff = toCol - fromCol;
+
+                if (piece.king) {
+                    if (Math.abs(rowDiff) === 1 && Math.abs(colDiff) === 1) return true;
+                    if (Math.abs(rowDiff) === 2 && Math.abs(colDiff) === 2) {
+                        const jumpedRow = fromRow + rowDiff / 2;
+                        const jumpedCol = fromCol + colDiff / 2;
+                        const jumpedPiece = this.board[jumpedRow][jumpedCol];
+                        return jumpedPiece && jumpedPiece.color !== piece.color;
+                    }
+                } else {
+                    const direction = piece.color === 'red' ? -1 : 1;
+                    if (rowDiff === direction && Math.abs(colDiff) === 1) return true;
+                    if (rowDiff === 2 * direction && Math.abs(colDiff) === 2) {
+                        const jumpedRow = fromRow + direction;
+                        const jumpedCol = fromCol + colDiff / 2;
+                        const jumpedPiece = this.board[jumpedRow][jumpedCol];
+                        return jumpedPiece && jumpedPiece.color !== piece.color;
+                    }
+                }
+
+                return false;
+            }
+
+            moveRandomly() {
+                const directions = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+                let [row, col] = this.currentPosition;
+                let newRow, newCol;
+                do {
+                    [newRow, newCol] = directions[Math.floor(Math.random() * directions.length)];
+                    newRow += row;
+                    newCol += col;
+                } while (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8);
+                this.currentPosition = [newRow, newCol];
+                return [newRow, newCol];
+            }
+
+            findValidMove() {
+                const [targetRow, targetCol] = this.currentPosition;
+                for (let fromRow = 0; fromRow < 8; fromRow++) {
+                    for (let fromCol = 0; fromCol < 8; fromCol++) {
+                        if (this.board[fromRow][fromCol] && this.board[fromRow][fromCol].color === this.currentPlayer) {
+                            if (this.isValidMove(fromRow, fromCol, targetRow, targetCol)) {
+                                return [fromRow, fromCol];
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+
+            makeMove(fromRow, fromCol, toRow, toCol) {
+                const piece = this.board[fromRow][fromCol];
+                this.board[toRow][toCol] = piece;
+                this.board[fromRow][fromCol] = null;
+
+                if (Math.abs(toRow - fromRow) === 2) {
+                    const jumpedRow = (fromRow + toRow) / 2;
+                    const jumpedCol = (fromCol + toCol) / 2;
+                    this.board[jumpedRow][jumpedCol] = null;
+                }
+
+                if ((piece.color === 'red' && toRow === 0) || (piece.color === 'black' && toRow === 7)) {
+                    piece.king = true;
+                }
+
+                this.currentPlayer = this.currentPlayer === 'red' ? 'black' : 'red';
+                this.currentPosition = [Math.floor(Math.random() * 8), Math.floor(Math.random() * 8)];
+            }
+
+            reset() {
+                this.board = Array(8).fill().map(() => Array(8).fill(null));
+                this.currentPlayer = 'red';
+                this.currentPosition = [0, 0];
+                this.initializeBoard();
+            }
+        }
+
+        const game = new CheckersGame();
+        const boardElement = document.getElementById('checkerboard');
+        const statusElement = document.getElementById('status');
+        const startButton = document.getElementById('start');
+        const stopButton = document.getElementById('stop');
+        const resetButton = document.getElementById('reset');
+        let timeoutId = null;
+
+        function updateBoard() {
+            boardElement.innerHTML = '';
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = `cell ${(row + col) % 2 === 0 ? 'light' : 'dark'}`;
+                    if (row === game.currentPosition[0] && col === game.currentPosition[1]) {
+                        cell.classList.add('highlight-red');
+                    }
+                    const piece = game.board[row][col];
+                    if (piece) {
+                        const pieceElement = document.createElement('div');
+                        pieceElement.className = `piece ${piece.color}`;
+                        if (piece.king) pieceElement.classList.add('king');
+                        cell.appendChild(pieceElement);
+                    }
+                    boardElement.appendChild(cell);
+                }
+            }
+            statusElement.textContent = `${game.currentPlayer.charAt(0).toUpperCase() + game.currentPlayer.slice(1)}'s turn`;
+        }
+
+        function step() {
+            const [toRow, toCol] = game.moveRandomly();
+            updateBoard();
+
+            const validMove = game.findValidMove();
+            if (validMove) {
+                const [fromRow, fromCol] = validMove;
+                timeoutId = setTimeout(() => {
+                    boardElement.children[toRow * 8 + toCol].classList.remove('highlight-red');
+                    boardElement.children[toRow * 8 + toCol].classList.add('highlight-green');
+                    timeoutId = setTimeout(() => {
+                        game.makeMove(fromRow, fromCol, toRow, toCol);
+                        updateBoard();
+                        timeoutId = setTimeout(step, 200);
+                    }, 500);
+                }, 500);
+            } else {
+                timeoutId = setTimeout(step, 200); // Continue the random walk if no valid move is found
+            }
+        }
+
+        function startGame() {
+            if (!timeoutId) {
+                step(); // Start the game loop
+                startButton.disabled = true;
+                stopButton.disabled = false;
+            }
+        }
+
+        function stopGame() {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        }
+
+        function resetGame() {
+            stopGame();
+            game.reset();
+            updateBoard();
+        }
+
+        startButton.addEventListener('click', startGame);
+        stopButton.addEventListener('click', stopGame);
+        resetButton.addEventListener('click', resetGame);
+
+        updateBoard();
+    </script>
+</body>
+</html>

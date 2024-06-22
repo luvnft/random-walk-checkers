@@ -71,6 +71,19 @@
             padding: 5px 10px;
             font-size: 16px;
         }
+        #speed-control {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+        }
+        #speed-slider {
+            width: 200px;
+            margin: 0 10px;
+        }
+        #win-counter {
+            margin-top: 10px;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
@@ -81,6 +94,14 @@
         <button id="start">Start</button>
         <button id="stop">Stop</button>
         <button id="reset">Reset</button>
+        <div id="speed-control">
+            <label for="speed-slider">Speed: </label>
+            <input type="range" id="speed-slider" min="1" max="100" value="1">
+            <span id="speed-value">1x</span>
+        </div>
+        <div id="win-counter">
+            Red wins: <span id="red-wins">0</span> | Black wins: <span id="black-wins">0</span>
+        </div>
     </div>
 
     <script>
@@ -190,6 +211,22 @@
                 this.currentPosition = [0, 0];
                 this.initializeBoard();
             }
+
+            checkWinner() {
+                let redPieces = 0;
+                let blackPieces = 0;
+                for (let row = 0; row < 8; row++) {
+                    for (let col = 0; col < 8; col++) {
+                        if (this.board[row][col]) {
+                            if (this.board[row][col].color === 'red') redPieces++;
+                            else blackPieces++;
+                        }
+                    }
+                }
+                if (redPieces === 0) return 'black';
+                if (blackPieces === 0) return 'red';
+                return null;
+            }
         }
 
         const game = new CheckersGame();
@@ -198,7 +235,12 @@
         const startButton = document.getElementById('start');
         const stopButton = document.getElementById('stop');
         const resetButton = document.getElementById('reset');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedValue = document.getElementById('speed-value');
+        const redWins = document.getElementById('red-wins');
+        const blackWins = document.getElementById('black-wins');
         let timeoutId = null;
+        let baseSpeed = 200;
 
         function updateBoard() {
             boardElement.innerHTML = '';
@@ -222,6 +264,38 @@
             statusElement.textContent = `${game.currentPlayer.charAt(0).toUpperCase() + game.currentPlayer.slice(1)}'s turn`;
         }
 
+        async function incrementWinCount(winner) {
+            try {
+                const response = await fetch(`https://api.countapi.xyz/hit/random-walk-checkers/${winner}-wins`);
+                const data = await response.json();
+                if (winner === 'red') {
+                    redWins.textContent = data.value;
+                } else {
+                    blackWins.textContent = data.value;
+                }
+            } catch (error) {
+                console.error('Error updating win count:', error);
+            }
+        }
+
+        async function getWinCounts() {
+            try {
+                const redResponse = await fetch('https://api.countapi.xyz/get/random-walk-checkers/red-wins');
+                const blackResponse = await fetch('https://api.countapi.xyz/get/random-walk-checkers/black-wins');
+                const redData = await redResponse.json();
+                const blackData = await blackResponse.json();
+                redWins.textContent = redData.value || '0';
+                blackWins.textContent = blackData.value || '0';
+            } catch (error) {
+                console.error('Error fetching win counts:', error);
+            }
+        }
+
+        function calculateDelay() {
+            const speed = parseInt(speedSlider.value);
+            return baseSpeed / speed;
+        }
+
         function step() {
             const [toRow, toCol] = game.moveRandomly();
             updateBoard();
@@ -235,17 +309,25 @@
                     timeoutId = setTimeout(() => {
                         game.makeMove(fromRow, fromCol, toRow, toCol);
                         updateBoard();
-                        timeoutId = setTimeout(step, 200);
-                    }, 500);
-                }, 500);
+                        const winner = game.checkWinner();
+                        if (winner) {
+                            incrementWinCount(winner).then(() => {
+                                statusElement.textContent = `${winner.charAt(0).toUpperCase() + winner.slice(1)} wins!`;
+                                stopGame();
+                            });
+                        } else {
+                            timeoutId = setTimeout(step, calculateDelay());
+                        }
+                    }, calculateDelay());
+                }, calculateDelay());
             } else {
-                timeoutId = setTimeout(step, 200); // Continue the random walk if no valid move is found
+                timeoutId = setTimeout(step, calculateDelay());
             }
         }
 
         function startGame() {
             if (!timeoutId) {
-                step(); // Start the game loop
+                step();
                 startButton.disabled = true;
                 stopButton.disabled = false;
             }
@@ -267,8 +349,12 @@
         startButton.addEventListener('click', startGame);
         stopButton.addEventListener('click', stopGame);
         resetButton.addEventListener('click', resetGame);
+        speedSlider.addEventListener('input', () => {
+            speedValue.textContent = `${speedSlider.value}x`;
+        });
 
         updateBoard();
+        getWinCounts();
     </script>
 </body>
 </html>

@@ -20,7 +20,7 @@
             grid-template-columns: repeat(8, 50px);
             grid-template-rows: repeat(8, 50px);
             gap: 1px;
-            background-color: #000;
+            background-color: #ffffff;
             padding: 1px;
         }
         .cell {
@@ -84,6 +84,11 @@
             margin-top: 10px;
             font-size: 16px;
         }
+        #last-updated {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -102,9 +107,15 @@
         <div id="win-counter">
             Red wins: <span id="red-wins">0</span> | Black wins: <span id="black-wins">0</span>
         </div>
+        <div id="last-updated">Most recent global win recorded at: <span id="update-time">N/A</span></div>
     </div>
 
     <script>
+        const token = 'mzqtjvkjnzzze'; // Yes, you certainly could wreak havoc on the board. We each make our choices. 
+        const baseUrl = 'https://keepthescore.com';
+        const getInfo = `/api/${token}/board/`;
+        const score = `/api/${token}/score/`;
+
         class CheckersGame {
             constructor() {
                 this.board = Array(8).fill().map(() => Array(8).fill(null));
@@ -239,8 +250,64 @@
         const speedValue = document.getElementById('speed-value');
         const redWins = document.getElementById('red-wins');
         const blackWins = document.getElementById('black-wins');
+        const updateTime = document.getElementById('update-time');
         let timeoutId = null;
         let baseSpeed = 200;
+
+        async function getWinCounts() {
+            try {
+                const response = await fetch(baseUrl + getInfo);
+                const data = await response.json();
+                if (response.status === 200) {
+                    const players = data.players;
+                    let blackScore = 0, redScore = 0;
+                    players.forEach(player => {
+                        if (player.name.toLowerCase() === 'black') {
+                            blackScore = player.score;
+                        } else if (player.name.toLowerCase() === 'red') {
+                            redScore = player.score;
+                        }
+                    });
+                    const lastUpdated = data.board.update_date;
+                    redWins.textContent = redScore;
+                    blackWins.textContent = blackScore;
+                    updateTime.textContent = lastUpdated;
+                }
+            } catch (error) {
+                console.error('Error fetching win counts:', error);
+            }
+        }
+
+        async function incrementScore(playerName) {
+            try {
+                const response = await fetch(baseUrl + getInfo);
+                const data = await response.json();
+                const players = data.players;
+                const player = players.find(p => p.name.toLowerCase() === playerName.toLowerCase());
+                if (player) {
+                    const playerId = player.id;
+                    const payload = {
+                        player_id: playerId,
+                        score: 1,
+                        operation: "increment"
+                    };
+                    const incrementResponse = await fetch(baseUrl + score, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    if (incrementResponse.status === 200) {
+                        getWinCounts(); // Refresh the counts
+                    } else {
+                        console.error('Error incrementing score:', incrementResponse.statusText);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching player ID:', error);
+            }
+        }
 
         function updateBoard() {
             boardElement.innerHTML = '';
@@ -264,33 +331,6 @@
             statusElement.textContent = `${game.currentPlayer.charAt(0).toUpperCase() + game.currentPlayer.slice(1)}'s turn`;
         }
 
-        async function incrementWinCount(winner) {
-            try {
-                const response = await fetch(`https://api.countapi.xyz/hit/random-walk-checkers/${winner}-wins`);
-                const data = await response.json();
-                if (winner === 'red') {
-                    redWins.textContent = data.value;
-                } else {
-                    blackWins.textContent = data.value;
-                }
-            } catch (error) {
-                console.error('Error updating win count:', error);
-            }
-        }
-
-        async function getWinCounts() {
-            try {
-                const redResponse = await fetch('https://api.countapi.xyz/get/random-walk-checkers/red-wins');
-                const blackResponse = await fetch('https://api.countapi.xyz/get/random-walk-checkers/black-wins');
-                const redData = await redResponse.json();
-                const blackData = await blackResponse.json();
-                redWins.textContent = redData.value || '0';
-                blackWins.textContent = blackData.value || '0';
-            } catch (error) {
-                console.error('Error fetching win counts:', error);
-            }
-        }
-
         function calculateDelay() {
             const speed = parseInt(speedSlider.value);
             return baseSpeed / speed;
@@ -311,7 +351,7 @@
                         updateBoard();
                         const winner = game.checkWinner();
                         if (winner) {
-                            incrementWinCount(winner).then(() => {
+                            incrementScore(winner).then(() => {
                                 statusElement.textContent = `${winner.charAt(0).toUpperCase() + winner.slice(1)} wins!`;
                                 stopGame();
                             });
